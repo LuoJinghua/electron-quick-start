@@ -1,20 +1,63 @@
 // Modules to control application life and create native browser window
-const {app, BrowserWindow} = require('electron')
+const {app, BrowserWindow, protocol} = require('electron')
 const path = require('path')
+const url = require('url')
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
 let mainWindow
 
+const PORT = process.env.PORT || 5000
+
+function startHttpServer() {
+  const express = require("express")
+
+  const app = express()
+  app.use("/", express.static(path.join(__dirname, "public")))
+  app.listen(PORT, function () {
+    console.log(`Express server listening on port ${PORT}`)
+  })
+}
+
+startHttpServer()
+
+protocol.registerSchemesAsPrivileged([{
+  scheme: 'demo',
+  privileges: {
+    bypassCSP: true,
+    secure: true,
+    standard: true,
+    supportFetchAPI: true,
+    allowServiceWorkers: true,
+    corsEnabled: false
+  }
+}])
+
 function createWindow () {
   // Create the browser window.
   mainWindow = new BrowserWindow({
-    width: 800,
-    height: 600,
+    width: 1024,
+    height: 768,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js')
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: true
     }
   })
+
+  const session = mainWindow.webContents.session
+  session.protocol.registerHttpProtocol('demo',
+    (request, _callback) => {
+      console.log(url)
+      const parsed = new url.URL(request.url)
+      const redirectedUrl = `http://localhost:${PORT}` + parsed.pathname
+      _callback({
+        url: redirectedUrl,
+        session: session,
+        method: request.method,
+        uploadData: request.uploadData
+      })
+    }
+  )
 
   // and load the index.html of the app.
   mainWindow.loadFile('index.html')
